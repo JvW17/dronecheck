@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1a6fa8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.json" />
+  <title>DroneCheck</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #ede9e4;
+      --card:       #ffffff;
+      --card2:      #f5f2ee;
+      --border:     #d6cec5;
+      --shadow:     0 1px 4px rgba(0,0,0,0.08);
+      --green:      #1a7a30;
+      --green-bg:   #e6f4ea;
+      --green-bdr:  #6ab880;
+      --yellow:     #8a5c00;
+      --yellow-bg:  #fef4d8;
+      --yellow-bdr: #d4a017;
+      --red:        #b91c1c;
+      --red-bg:     #fde8e8;
+      --red-bdr:    #e07070;
+      --blue:       #1a6fa8;
+      --blue-bg:    #e6f0f8;
+      --blue-bdr:   #6aadd4;
+      --text:       #1c1712;
+      --muted:      #6b5f54;
+      --label:      #9e9189;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding-bottom: 40px;
+    }
+
+    .phone { width: 100%; max-width: 420px; }
+
+    /* ── HEADER ── */
+    .header {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 18px 12px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: var(--shadow);
+    }
+    .header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+    .header h1 span { color: var(--blue); }
+    .header p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .gps-badge {
+      font-size: 11px; background: var(--green-bg); color: var(--green);
+      border: 1px solid var(--green-bdr); border-radius: 20px; padding: 4px 10px;
+      display: flex; align-items: center; gap: 5px; white-space: nowrap;
+    }
+    .gps-dot {
+      width: 6px; height: 6px; background: var(--green);
+      border-radius: 50%; animation: blink 1.8s infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+    /* ── LOADING ── */
+    .loading-screen {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 60vh; gap: 16px; padding: 40px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border); border-top-color: var(--blue);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 14px; color: var(--muted); text-align: center; }
+    .error-text { font-size: 13px; color: var(--red); text-align: center; line-height: 1.5; }
+    .retry-btn {
+      margin-top: 8px; padding: 8px 20px; border-radius: 10px;
+      background: var(--blue); color: #fff; border: none;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+
+    /* ── SECTION ── */
+    .section { padding: 16px 14px 0; }
+    .section-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--label); margin-bottom: 8px;
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; box-shadow: var(--shadow);
+    }
+
+    /* ── STATUS CARD ── */
+    .status-card {
+      border-radius: 14px; padding: 16px 18px;
+      display: flex; align-items: flex-start; gap: 14px; border: 1.5px solid;
+    }
+    .status-card.green  { background: var(--green-bg);  border-color: var(--green-bdr); }
+    .status-card.yellow { background: var(--yellow-bg); border-color: var(--yellow-bdr); }
+    .status-card.red    { background: var(--red-bg);    border-color: var(--red-bdr); }
+    .status-indicator {
+      width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
+    }
+    .status-card.green  .status-indicator { background: var(--green); }
+    .status-card.yellow .status-indicator { background: var(--yellow); }
+    .status-card.red    .status-indicator { background: var(--red); }
+    .status-text h2 { font-size: 16px; font-weight: 700; }
+    .status-card.green  .status-text h2 { color: var(--green); }
+    .status-card.yellow .status-text h2 { color: var(--yellow); }
+    .status-card.red    .status-text h2 { color: var(--red); }
+    .status-text p { font-size: 13px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+    .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .tag {
+      font-size: 11px; background: rgba(255,255,255,0.7);
+      border: 1px solid var(--border); border-radius: 8px; padding: 2px 8px;
+    }
+
+    /* ── ALTITUDE ── */
+    .altitude-bar {
+      padding: 12px 16px; display: flex; align-items: center;
+      justify-content: space-between; margin-top: 10px;
+    }
+    .altitude-label { font-size: 11px; color: var(--muted); }
+    .altitude-sublabel { font-size: 13px; font-weight: 600; margin-top: 1px; }
+    .altitude-value { font-size: 26px; font-weight: 800; color: var(--blue); }
+    .altitude-unit { font-size: 12px; color: var(--muted); }
+
+    /* ── WEATHER ── */
+    .weather-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .w-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 15px; box-shadow: var(--shadow);
+    }
+    .w-card.full { grid-column: 1 / -1; }
+    .w-label { font-size: 11px; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
+    .w-value { font-size: 23px; font-weight: 800; }
+    .w-value .w-unit { font-size: 13px; font-weight: 400; color: var(--muted); }
+    .w-value.green  { color: var(--green); }
+    .w-value.yellow { color: var(--yellow); }
+    .w-value.red    { color: var(--red); }
+    .w-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .w-sub.warn { color: var(--yellow); font-weight: 600; }
+    .w-sub.danger { color: var(--red); font-weight: 600; }
+    .wind-row { display: flex; align-items: baseline; gap: 20px; }
+    .wind-divider { width: 1px; height: 36px; background: var(--border); align-self: center; }
+    .wind-bar-wrap { margin-top: 12px; }
+    .wind-bar-scale {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--label); margin-bottom: 4px;
+    }
+    .wind-bar-bg {
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: 6px; height: 8px; position: relative;
+    }
+    .wind-bar-fill { height: 100%; border-radius: 6px; }
+    .wind-gust-line {
+      position: absolute; top: -4px; width: 2px; height: 16px;
+      border-radius: 1px;
+    }
+    .wind-gust-label {
+      position: absolute; top: -18px; transform: translateX(-50%);
+      font-size: 9px; font-weight: 700; white-space: nowrap;
+    }
+
+    /* ── ALERT ── */
+    .alert {
+      border-radius: 14px; padding: 13px 16px;
+      display: flex; align-items: flex-start; gap: 11px;
+      margin-top: 10px; border: 1.5px solid;
+    }
+    .alert.yellow { background: var(--yellow-bg); border-color: var(--yellow-bdr); }
+    .alert.red    { background: var(--red-bg);    border-color: var(--red-bdr); }
+    .alert .alert-title { font-size: 13px; font-weight: 700; }
+    .alert.yellow .alert-title { color: var(--yellow); }
+    .alert.red    .alert-title { color: var(--red); }
+    .alert .alert-body { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+    .alert-icon { font-size: 18px; flex-shrink: 0; line-height: 1.3; }
+    .hidden { display: none !important; }
+
+    /* ── NOTAM ── */
+    .notam-link {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 16px; text-decoration: none; color: var(--text);
+      border-radius: 14px; background: var(--card);
+      border: 1px solid var(--border); box-shadow: var(--shadow);
+      transition: border-color 0.15s;
+    }
+    .notam-link:hover { border-color: var(--blue); }
+    .notam-left { display: flex; align-items: center; gap: 10px; }
+    .notam-title { font-size: 13px; font-weight: 600; }
+    .notam-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .notam-arrow { color: var(--muted); font-size: 16px; }
+
+    /* ── MAP ── */
+    #map {
+      width: 100%; height: 260px; border-radius: 14px;
+      border: 1px solid var(--border); box-shadow: var(--shadow);
+    }
+
+    /* ── POI LIST ── */
+    .poi-list {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; margin-top: 10px;
+    }
+    .poi-list-header {
+      padding: 10px 14px 8px; font-size: 11px; font-weight: 700;
+      color: var(--label); letter-spacing: 0.8px; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .poi-item {
+      display: flex; align-items: center; padding: 11px 14px; gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .poi-item:last-child { border-bottom: none; }
+    .poi-dot {
+      width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid #fff;
+    }
+    .poi-dot.school   { background: #1a6fa8; box-shadow: 0 0 0 1.5px #1a6fa8; }
+    .poi-dot.hospital { background: #b91c1c; box-shadow: 0 0 0 1.5px #b91c1c; }
+    .poi-dot.zone     { background: #8a5c00; box-shadow: 0 0 0 1.5px #8a5c00; }
+    .poi-info { flex: 1; }
+    .poi-name { font-size: 13px; font-weight: 600; }
+    .poi-cat  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .poi-dist {
+      font-size: 12px; font-weight: 700; color: var(--muted);
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 2px 8px; white-space: nowrap;
+    }
+    .poi-empty { padding: 20px 14px; text-align: center; font-size: 13px; color: var(--muted); }
+
+    /* ── SUN / DAGLICHT ── */
+    .sun-row {
+      display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: stretch;
+    }
+    .sun-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 12px; text-align: center; box-shadow: var(--shadow);
+    }
+    .sun-label { font-size: 11px; color: var(--muted); font-weight: 500; }
+    .sun-time  { font-size: 20px; font-weight: 800; margin-top: 4px; }
+    .daylight-card {
+      border: 1.5px solid; border-radius: 14px; padding: 14px 12px;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center;
+    }
+    .daylight-card.ok     { background: var(--green-bg);  border-color: var(--green-bdr); }
+    .daylight-card.danger { background: var(--red-bg);    border-color: var(--red-bdr); }
+    .daylight-status { font-size: 13px; font-weight: 700; }
+    .daylight-card.ok     .daylight-status { color: var(--green); }
+    .daylight-card.danger .daylight-status { color: var(--red); }
+    .daylight-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ── UPDATED ── */
+    .updated-bar {
+      text-align: center; padding: 16px 14px 4px;
+      font-size: 11px; color: var(--label);
+    }
+
+    .spacer { height: 24px; }
+
+    @media (min-width: 480px) {
+      body { padding-top: 28px; }
+      .phone {
+        border: 1px solid var(--border); border-radius: 28px;
+        overflow: hidden; box-shadow: 0 24px 64px rgba(0,0,0,0.12);
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div>
+      <h1>Drone<span>Check</span></h1>
+      <p id="location-name">Locatie bepalen...</p>
+    </div>
+    <div class="gps-badge">
+      <div class="gps-dot"></div>
+      GPS actief
+    </div>
+  </div>
+
+  <!-- LOADING STATE -->
+  <div id="loading" class="loading-screen">
+    <div class="spinner"></div>
+    <div class="loading-text">Locatie en weerdata ophalen...</div>
+  </div>
+
+  <!-- ERROR STATE -->
+  <div id="error" class="loading-screen hidden">
+    <div class="error-text" id="error-msg"></div>
+    <button class="retry-btn" onclick="init()">Opnieuw proberen</button>
+  </div>
+
+  <!-- APP CONTENT (hidden until loaded) -->
+  <div id="app" class="hidden">
+
+    <!-- VLIEGSTATUS -->
+    <div class="section">
+      <div class="section-label">Vliegstatus</div>
+      <div id="status-card" class="status-card green">
+        <div class="status-indicator"></div>
+        <div class="status-text">
+          <h2 id="status-title">Laden...</h2>
+          <p id="status-desc"></p>
+          <div class="tags" id="status-tags"></div>
+        </div>
+      </div>
+
+      <!-- Reasons for non-green status -->
+      <div id="status-reasons"></div>
+
+      <div class="card altitude-bar" style="margin-top:10px">
+        <div>
+          <div class="altitude-label">Max. vlieghoogte op locatie</div>
+          <div class="altitude-sublabel">Weerdata berekend op deze hoogte</div>
+        </div>
+        <div>
+          <span class="altitude-value" id="max-alt">120</span>
+          <span class="altitude-unit"> m</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- WEER -->
+    <div class="section" style="margin-top:16px">
+      <div class="section-label" id="weather-label">Weer op 120 m hoogte</div>
+      <div class="weather-grid">
+
+        <div class="w-card full">
+          <div class="w-label">Wind &amp; windstoten</div>
+          <div class="wind-row">
+            <div>
+              <div class="w-value" id="wind-avg">--</div>
+              <div class="w-sub">gemiddeld</div>
+            </div>
+            <div class="wind-divider"></div>
+            <div>
+              <div class="w-value" id="wind-gust">--</div>
+              <div class="w-sub" id="wind-gust-sub">windstoten</div>
+            </div>
+          </div>
+          <div class="wind-bar-wrap">
+            <div style="position:relative; padding-top:20px;">
+              <div class="wind-bar-bg">
+                <div class="wind-bar-fill" id="wind-bar-fill"></div>
+                <div class="wind-gust-label" id="wind-gust-label"></div>
+                <div class="wind-gust-line" id="wind-gust-line"></div>
+              </div>
+            </div>
+            <div class="wind-bar-scale" style="margin-top:4px">
+              <span>0</span><span>25</span><span>50</span><span>75 km/h</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="w-card">
+          <div class="w-label">Neerslag</div>
+          <div class="w-value" id="rain-value">--</div>
+          <div class="w-sub" id="rain-sub"></div>
+        </div>
+
+        <div class="w-card">
+          <div class="w-label">Zichtbaarheid</div>
+          <div class="w-value" id="vis-value">--</div>
+          <div class="w-sub" id="vis-sub"></div>
+        </div>
+
+        <div class="w-card">
+          <div class="w-label">Wolkenbasis</div>
+          <div class="w-value" id="cloud-value">--</div>
+          <div class="w-sub" id="cloud-sub"></div>
+        </div>
+
+        <div class="w-card">
+          <div class="w-label">Temperatuur</div>
+          <div class="w-value" id="temp-value">--</div>
+          <div class="w-sub" id="temp-sub"></div>
+        </div>
+      </div>
+
+      <div id="battery-alert" class="alert yellow hidden">
+        <div class="alert-icon">🔋</div>
+        <div>
+          <div class="alert-title">Koude batterij — verminderd bereik</div>
+          <div class="alert-body">Onder 10°C daalt de accucapaciteit merkbaar. Warm de batterij voor op circa 20°C.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTAM -->
+    <div class="section" style="margin-top:16px">
+      <div class="section-label">Tijdelijke beperkingen</div>
+      <a class="notam-link" href="https://notaminfo.com/netherlandsmap" target="_blank">
+        <div class="notam-left">
+          <div style="font-size:18px">📋</div>
+          <div>
+            <div class="notam-title">Bekijk actuele NOTAMs</div>
+            <div class="notam-sub">Opent NOTAM-kaart voor Nederland</div>
+          </div>
+        </div>
+        <div class="notam-arrow">›</div>
+      </a>
+    </div>
+
+    <!-- OMGEVING -->
+    <div class="section" style="margin-top:16px">
+      <div class="section-label">Omgeving</div>
+      <div id="map"></div>
+      <div id="poi-list" class="poi-list">
+        <div class="poi-list-header">Aandachtspunten in de buurt</div>
+        <div class="poi-empty">Locaties zoeken...</div>
+      </div>
+    </div>
+
+    <!-- DAGLICHT -->
+    <div class="section" style="margin-top:16px">
+      <div class="section-label">Daglicht</div>
+      <div class="sun-row">
+        <div class="sun-card">
+          <div class="sun-label">Opgang</div>
+          <div class="sun-time" id="sunrise">--:--</div>
+        </div>
+        <div id="daylight-card" class="daylight-card ok">
+          <div class="daylight-status" id="daylight-status">Laden...</div>
+          <div class="daylight-sub" id="daylight-sub"></div>
+        </div>
+        <div class="sun-card">
+          <div class="sun-label">Ondergang</div>
+          <div class="sun-time" id="sunset">--:--</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="updated-bar" id="updated-bar"></div>
+    <div class="spacer"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DroneCheck — Main Application Logic
+// ═══════════════════════════════════════════════════════
+
+// ── CONFIG ──
+const WIND_LIMIT_YELLOW = 30;   // km/h gusts for caution
+const WIND_LIMIT_RED    = 50;   // km/h gusts for danger
+const TEMP_BATTERY_WARN = 10;   // °C
+const VIS_LIMIT         = 1;    // km — VLOS minimum
+const POI_RADIUS        = 2000; // meters
+const DEFAULT_MAX_ALT   = 120;  // meters (EU open category)
+
+// ── STATE ──
+let state = {
+  lat: null, lng: null,
+  maxAlt: DEFAULT_MAX_ALT,
+  weather: null,
+  sunrise: null, sunset: null,
+  isDaylight: true,
+  pois: [],
+  issues: []  // { level: 'yellow'|'red', text: '...' }
+};
+
+let leafletMap = null;
+
+// ── INIT ──
+async function init() {
+  showEl('loading'); hideEl('app'); hideEl('error');
+  state.issues = [];
+
+  try {
+    // Step 1: Get GPS
+    const pos = await getLocation();
+    state.lat = pos.coords.latitude;
+    state.lng = pos.coords.longitude;
+
+    // Reverse geocode for display name
+    reverseGeocode(state.lat, state.lng);
+
+    // Step 2: Fetch data in parallel
+    const [weather, sun, pois] = await Promise.all([
+      fetchWeather(state.lat, state.lng),
+      fetchSunTimes(state.lat, state.lng),
+      fetchPOIs(state.lat, state.lng)
+    ]);
+
+    state.weather = weather;
+    state.sunrise = sun.sunrise;
+    state.sunset  = sun.sunset;
+    state.pois    = pois;
+
+    // Step 3: Determine daylight
+    computeDaylight();
+
+    // Step 4: Render everything
+    hideEl('loading');
+    showEl('app');
+    renderWeather();
+    renderDaylight();
+    renderMap();
+    renderPOIs();
+    computeOverallStatus();
+    renderUpdatedTime();
+
+  } catch (err) {
+    hideEl('loading');
+    showEl('error');
+    document.getElementById('error-msg').textContent =
+      err.code === 1
+        ? 'GPS-toegang is geblokkeerd.\nSta locatie toe in je browserinstellingen.'
+        : `Fout bij laden: ${err.message}`;
+  }
+}
+
+// ── GPS ──
+function getLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) reject(new Error('Geolocation niet beschikbaar'));
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true, timeout: 15000, maximumAge: 60000
+    });
+  });
+}
+
+// ── REVERSE GEOCODE (Nominatim) ──
+async function reverseGeocode(lat, lng) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=14&addressdetails=1`,
+      { headers: { 'Accept-Language': 'nl' } }
+    );
+    const d = await r.json();
+    const a = d.address || {};
+    const name = a.suburb || a.village || a.town || a.city_district || a.city || '';
+    const area = a.municipality || a.county || a.state || '';
+    document.getElementById('location-name').textContent =
+      name && area ? `${name}, ${area}` : name || area || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+  } catch {
+    document.getElementById('location-name').textContent = `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+  }
+}
+
+// ── WEATHER (Open-Meteo) ──
+async function fetchWeather(lat, lng) {
+  const params = [
+    `latitude=${lat}`, `longitude=${lng}`,
+    'current=temperature_2m,precipitation,weather_code,cloud_cover,visibility,wind_speed_10m,wind_gusts_10m',
+    'hourly=wind_speed_120m,wind_gusts_120m',
+    'forecast_days=1',
+    'timezone=auto'
+  ].join('&');
+
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  if (!r.ok) throw new Error('Weer ophalen mislukt');
+  const d = await r.json();
+
+  // Find wind at max altitude from hourly data (closest hour)
+  const now = new Date();
+  const currentHour = now.getHours();
+  const hourlyTimes = d.hourly?.time || [];
+  let hourIdx = 0;
+  for (let i = 0; i < hourlyTimes.length; i++) {
+    const h = new Date(hourlyTimes[i]).getHours();
+    if (h === currentHour) { hourIdx = i; break; }
+  }
+
+  const windSpeed120 = d.hourly?.wind_speed_120m?.[hourIdx];
+  const windGust120  = d.hourly?.wind_gusts_120m?.[hourIdx];
+
+  return {
+    temp:       d.current.temperature_2m,
+    precip:     d.current.precipitation,
+    weatherCode:d.current.weather_code,
+    cloudCover: d.current.cloud_cover,
+    visibility: d.current.visibility,           // in meters
+    windSpeed10:d.current.wind_speed_10m,
+    windGust10: d.current.wind_gusts_10m,
+    windSpeed:  windSpeed120 ?? d.current.wind_speed_10m,
+    windGust:   windGust120  ?? d.current.wind_gusts_10m,
+    hasAltWind: windSpeed120 != null
+  };
+}
+
+// ── SUN TIMES (Open-Meteo) ──
+async function fetchSunTimes(lat, lng) {
+  const r = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=sunrise,sunset&timezone=auto&forecast_days=1`
+  );
+  if (!r.ok) throw new Error('Zontijden ophalen mislukt');
+  const d = await r.json();
+  return {
+    sunrise: new Date(d.daily.sunrise[0]),
+    sunset:  new Date(d.daily.sunset[0])
+  };
+}
+
+// ── POIs (Overpass API) ──
+async function fetchPOIs(lat, lng) {
+  const r = POI_RADIUS;
+  const query = `
+    [out:json][timeout:10];
+    (
+      nwr["amenity"="school"](around:${r},${lat},${lng});
+      nwr["amenity"="kindergarten"](around:${r},${lat},${lng});
+      nwr["amenity"="hospital"](around:${r},${lat},${lng});
+      nwr["amenity"="clinic"](around:${r},${lat},${lng});
+      nwr["amenity"="prison"](around:${r},${lat},${lng});
+      nwr["power"="line"](around:${r},${lat},${lng});
+    );
+    out center 50;
+  `;
+
+  try {
+    const resp = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: `data=${encodeURIComponent(query)}`
+    });
+    if (!resp.ok) return [];
+    const d = await resp.json();
+
+    const catMap = {
+      school: { label: 'School', cat: 'school' },
+      kindergarten: { label: 'Kinderopvang', cat: 'school' },
+      hospital: { label: 'Ziekenhuis', cat: 'hospital' },
+      clinic: { label: 'Zorginstelling', cat: 'hospital' },
+      prison: { label: 'Gevangenis', cat: 'zone' }
+    };
+
+    const results = [];
+    const seen = new Set();
+
+    for (const el of d.elements) {
+      const amenity = el.tags?.amenity;
+      const power   = el.tags?.power;
+      const plat = el.center?.lat ?? el.lat;
+      const plng = el.center?.lon ?? el.lon;
+      if (!plat || !plng) continue;
+
+      // Dedup by rounding coords
+      const key = `${plat.toFixed(4)},${plng.toFixed(4)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const dist = haversine(lat, lng, plat, plng);
+
+      if (power === 'line') {
+        // We don't list individual power line nodes — just note the presence
+        continue;
+      }
+
+      const cm = catMap[amenity];
+      if (!cm) continue;
+
+      results.push({
+        name: el.tags?.name || cm.label,
+        type: cm.label,
+        cat:  cm.cat,
+        lat: plat, lng: plng,
+        dist
+      });
+    }
+
+    results.sort((a, b) => a.dist - b.dist);
+    return results.slice(0, 10);
+
+  } catch {
+    return [];
+  }
+}
+
+// ── HAVERSINE ──
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── COMPUTE DAYLIGHT ──
+function computeDaylight() {
+  const now = new Date();
+  state.isDaylight = now >= state.sunrise && now <= state.sunset;
+}
+
+// ── RENDER: WEATHER ──
+function renderWeather() {
+  const w = state.weather;
+
+  // Header label
+  const altLabel = state.maxAlt;
+  document.getElementById('weather-label').textContent = `Weer op ${altLabel} m hoogte`;
+  document.getElementById('max-alt').textContent = altLabel;
+
+  // Wind
+  const windAvg = Math.round(w.windSpeed);
+  const windGust = Math.round(w.windGust);
+  const windAvgEl = document.getElementById('wind-avg');
+  const windGustEl = document.getElementById('wind-gust');
+
+  windAvgEl.innerHTML = `${windAvg} <span class="w-unit">km/h</span>`;
+  windGustEl.innerHTML = `${windGust} <span class="w-unit">km/h</span>`;
+
+  // Color coding
+  windAvgEl.className = 'w-value ' + windColor(windAvg);
+  windGustEl.className = 'w-value ' + windColor(windGust);
+
+  const gustSub = document.getElementById('wind-gust-sub');
+  if (windGust >= WIND_LIMIT_RED) {
+    gustSub.textContent = '⚠️ gevaarlijk!';
+    gustSub.className = 'w-sub danger';
+    state.issues.push({ level: 'red', text: `Windstoten ${windGust} km/h — te gevaarlijk om te vliegen` });
+  } else if (windGust >= WIND_LIMIT_YELLOW) {
+    gustSub.textContent = '⚠️ windstoten';
+    gustSub.className = 'w-sub warn';
+    state.issues.push({ level: 'yellow', text: `Windstoten ${windGust} km/h — wees voorzichtig` });
+  } else {
+    gustSub.textContent = 'windstoten';
+    gustSub.className = 'w-sub';
+  }
+
+  // Wind bar
+  const maxBar = 75;
+  const avgPct = Math.min(windAvg / maxBar * 100, 100);
+  const gustPct = Math.min(windGust / maxBar * 100, 100);
+  const fill = document.getElementById('wind-bar-fill');
+  fill.style.width = avgPct + '%';
+  fill.style.background = windGust >= WIND_LIMIT_RED
+    ? `linear-gradient(90deg, var(--green), var(--red))`
+    : `linear-gradient(90deg, var(--green), var(--yellow))`;
+
+  const gustLine = document.getElementById('wind-gust-line');
+  gustLine.style.left = gustPct + '%';
+  gustLine.style.background = windGust >= WIND_LIMIT_RED ? 'var(--red)' : 'var(--yellow)';
+
+  const gustLabel = document.getElementById('wind-gust-label');
+  gustLabel.style.left = gustPct + '%';
+  gustLabel.textContent = windGust + ' km/h';
+  gustLabel.style.color = windGust >= WIND_LIMIT_RED ? 'var(--red)' : 'var(--yellow)';
+
+  // Precipitation
+  const rainVal = document.getElementById('rain-value');
+  const rainSub = document.getElementById('rain-sub');
+  if (w.precip > 0) {
+    rainVal.textContent = 'Ja';
+    rainVal.className = 'w-value red';
+    rainSub.textContent = `${w.precip} mm/h`;
+    rainSub.className = 'w-sub danger';
+    state.issues.push({ level: 'yellow', text: 'Het regent — vlieg met voorzichtigheid' });
+  } else {
+    rainVal.textContent = 'Nee';
+    rainVal.className = 'w-value green';
+    const rainChance = w.weatherCode >= 51 ? 'mogelijke motregen' : 'droog';
+    rainSub.textContent = rainChance;
+    rainSub.className = 'w-sub';
+  }
+
+  // Visibility
+  const visKm = (w.visibility / 1000).toFixed(1);
+  const visVal = document.getElementById('vis-value');
+  const visSub = document.getElementById('vis-sub');
+  if (visKm < VIS_LIMIT) {
+    visVal.innerHTML = `${visKm} <span class="w-unit">km</span>`;
+    visVal.className = 'w-value red';
+    visSub.textContent = '⚠️ VLOS onvoldoende';
+    visSub.className = 'w-sub danger';
+    state.issues.push({ level: 'red', text: `Zichtbaarheid ${visKm} km — VLOS niet gegarandeerd` });
+  } else if (visKm < 3) {
+    visVal.innerHTML = `${visKm} <span class="w-unit">km</span>`;
+    visVal.className = 'w-value yellow';
+    visSub.textContent = '⚠️ VLOS beperkt';
+    visSub.className = 'w-sub warn';
+    state.issues.push({ level: 'yellow', text: `Beperkte zichtbaarheid: ${visKm} km` });
+  } else {
+    visVal.innerHTML = `${parseFloat(visKm)} <span class="w-unit">km</span>`;
+    visVal.className = 'w-value green';
+    visSub.textContent = 'VLOS vrij';
+    visSub.className = 'w-sub';
+  }
+
+  // Cloud base — estimate from cloud cover & temp (rough approximation)
+  const cloudBase = estimateCloudBase(w.temp, w.cloudCover);
+  const cloudVal = document.getElementById('cloud-value');
+  const cloudSub = document.getElementById('cloud-sub');
+  if (cloudBase < state.maxAlt) {
+    cloudVal.innerHTML = `${cloudBase} <span class="w-unit">m</span>`;
+    cloudVal.className = 'w-value red';
+    cloudSub.textContent = '⚠️ onder max. hoogte';
+    cloudSub.className = 'w-sub danger';
+    state.issues.push({ level: 'yellow', text: 'Wolkenbasis mogelijk onder vlieghoogte' });
+  } else {
+    cloudVal.innerHTML = `${cloudBase.toLocaleString('nl-NL')} <span class="w-unit">m</span>`;
+    cloudVal.className = 'w-value green';
+    cloudSub.textContent = 'ruim boven max.';
+    cloudSub.className = 'w-sub';
+  }
+
+  // Temperature
+  const tempVal = document.getElementById('temp-value');
+  const tempSub = document.getElementById('temp-sub');
+  const battAlert = document.getElementById('battery-alert');
+  tempVal.textContent = `${Math.round(w.temp)}°C`;
+
+  if (w.temp < TEMP_BATTERY_WARN) {
+    tempVal.className = 'w-value yellow';
+    tempSub.innerHTML = '⚠️ batterij: let op';
+    tempSub.className = 'w-sub warn';
+    battAlert.classList.remove('hidden');
+    state.issues.push({ level: 'yellow', text: `${Math.round(w.temp)}°C — batterijcapaciteit verminderd` });
+  } else {
+    tempVal.className = 'w-value green';
+    tempSub.textContent = 'batterij: OK';
+    tempSub.className = 'w-sub';
+    battAlert.classList.add('hidden');
+  }
+}
+
+function windColor(kmh) {
+  if (kmh >= WIND_LIMIT_RED) return 'red';
+  if (kmh >= WIND_LIMIT_YELLOW) return 'yellow';
+  return 'green';
+}
+
+function estimateCloudBase(tempC, cloudCover) {
+  // Rough estimate: cloud base ≈ 125 * (temp - dewpoint)
+  // With high cloud cover we assume lower base
+  if (cloudCover < 20) return 3000;
+  if (cloudCover < 50) return 2000;
+  if (cloudCover < 80) return 1200;
+  return 800;
+}
+
+// ── RENDER: DAYLIGHT ──
+function renderDaylight() {
+  const fmt = (d) => d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('sunrise').textContent = fmt(state.sunrise);
+  document.getElementById('sunset').textContent  = fmt(state.sunset);
+
+  const card = document.getElementById('daylight-card');
+  const statusEl = document.getElementById('daylight-status');
+  const subEl = document.getElementById('daylight-sub');
+
+  if (state.isDaylight) {
+    card.className = 'daylight-card ok';
+    statusEl.textContent = 'Daglicht';
+    const now = new Date();
+    const remaining = state.sunset - now;
+    const hrs = Math.floor(remaining / 3600000);
+    const mins = Math.floor((remaining % 3600000) / 60000);
+    subEl.textContent = `Nog ${hrs}u ${mins}m`;
+  } else {
+    card.className = 'daylight-card danger';
+    statusEl.textContent = 'Nacht';
+    subEl.textContent = 'Niet vliegen';
+    state.issues.push({ level: 'red', text: 'Het is donker — vliegen niet toegestaan in open categorie' });
+  }
+}
+
+// ── RENDER: MAP + POIs ──
+function renderMap() {
+  if (leafletMap) leafletMap.remove();
+
+  leafletMap = L.map('map', {
+    center: [state.lat, state.lng], zoom: 14,
+    zoomControl: true, attributionControl: true
+  });
+
+  L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Tiles © Esri', maxZoom: 19 }
+  ).addTo(leafletMap);
+
+  L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    { attribution: '', maxZoom: 19, opacity: 0.75 }
+  ).addTo(leafletMap);
+
+  // Your location
+  const youIcon = L.divIcon({
+    html: '<div style="width:16px;height:16px;background:#1a7a30;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 2px #1a7a30,0 0 10px rgba(26,122,48,0.5)"></div>',
+    className: '', iconAnchor: [8, 8]
+  });
+  L.marker([state.lat, state.lng], { icon: youIcon })
+    .addTo(leafletMap)
+    .bindPopup('<b>Jouw locatie</b>');
+
+  // Flight range circle
+  L.circle([state.lat, state.lng], {
+    radius: 500, color: '#1a7a30', fillColor: '#1a7a30',
+    fillOpacity: 0.05, weight: 1.5, dashArray: '4 5'
+  }).addTo(leafletMap);
+
+  // POI markers
+  const colors = { school: '#1a6fa8', hospital: '#b91c1c', zone: '#8a5c00' };
+  for (const poi of state.pois) {
+    const c = colors[poi.cat] || '#666';
+    const icon = L.divIcon({
+      html: `<div style="width:13px;height:13px;background:${c};border:2.5px solid #fff;border-radius:50%;box-shadow:0 0 0 1.5px ${c}"></div>`,
+      className: '', iconAnchor: [6, 6]
+    });
+    L.marker([poi.lat, poi.lng], { icon })
+      .addTo(leafletMap)
+      .bindPopup(`<b>${poi.name}</b><br><span style="color:#666">${poi.type} — ${formatDist(poi.dist)}</span>`);
+  }
+}
+
+function renderPOIs() {
+  const list = document.getElementById('poi-list');
+  const header = '<div class="poi-list-header">Aandachtspunten in de buurt</div>';
+
+  if (state.pois.length === 0) {
+    list.innerHTML = header + '<div class="poi-empty">Geen aandachtspunten gevonden binnen 2 km</div>';
+    return;
+  }
+
+  let html = header;
+  for (const poi of state.pois) {
+    html += `
+      <div class="poi-item">
+        <div class="poi-dot ${poi.cat}"></div>
+        <div class="poi-info">
+          <div class="poi-name">${poi.name}</div>
+          <div class="poi-cat">${poi.type}</div>
+        </div>
+        <div class="poi-dist">${formatDist(poi.dist)}</div>
+      </div>`;
+  }
+  list.innerHTML = html;
+}
+
+function formatDist(m) {
+  return m >= 1000 ? `${(m/1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m)} m`;
+}
+
+// ── OVERALL STATUS ──
+function computeOverallStatus() {
+  const card = document.getElementById('status-card');
+  const title = document.getElementById('status-title');
+  const desc = document.getElementById('status-desc');
+  const tags = document.getElementById('status-tags');
+  const reasonsEl = document.getElementById('status-reasons');
+
+  const hasRed = state.issues.some(i => i.level === 'red');
+  const hasYellow = state.issues.some(i => i.level === 'yellow');
+
+  // Tags
+  tags.innerHTML = `<span class="tag">Max. ${state.maxAlt}m</span>`;
+
+  if (hasRed) {
+    card.className = 'status-card red';
+    title.textContent = 'Niet vliegen';
+    desc.textContent = 'Eén of meer harde voorwaarden zijn niet voldaan.';
+  } else if (hasYellow) {
+    card.className = 'status-card yellow';
+    title.textContent = 'Vliegen met aandacht';
+    desc.textContent = 'Voorwaarden zijn voldaan, maar er zijn aandachtspunten.';
+  } else {
+    card.className = 'status-card green';
+    title.textContent = 'Je mag hier vliegen';
+    desc.textContent = 'Alle voorwaarden zijn voldaan — goede omstandigheden.';
+  }
+
+  // Render reason alerts
+  let reasonsHtml = '';
+  for (const issue of state.issues) {
+    reasonsHtml += `
+      <div class="alert ${issue.level}" style="margin-top:8px">
+        <div class="alert-icon">⚠️</div>
+        <div><div class="alert-title">${issue.text}</div></div>
+      </div>`;
+  }
+  reasonsEl.innerHTML = reasonsHtml;
+}
+
+// ── RENDER UPDATED TIME ──
+function renderUpdatedTime() {
+  const now = new Date();
+  const fmt = now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('updated-bar').textContent = `Bijgewerkt om ${fmt}`;
+}
+
+// ── HELPERS ──
+function showEl(id) { document.getElementById(id).classList.remove('hidden'); }
+function hideEl(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ── SERVICE WORKER ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ── START ──
+init();
+</script>
+</body>
+</html>
