@@ -89,6 +89,36 @@
       background: var(--blue); color: #fff; border: none;
       font-size: 14px; font-weight: 600; cursor: pointer;
     }
+    /* ── LOCATION SEARCH (GPS fallback) ── */
+    .location-search {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px; width: 100%; max-width: 320px;
+      box-shadow: var(--shadow);
+    }
+    .location-search h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .location-search p  { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+    .location-search-row { display: flex; gap: 8px; }
+    .location-input {
+      flex: 1; padding: 9px 12px; border: 1px solid var(--border);
+      border-radius: 10px; font-size: 14px; background: var(--card2);
+      color: var(--text); outline: none;
+    }
+    .location-input:focus { border-color: var(--blue); }
+    .search-btn {
+      padding: 9px 14px; border-radius: 10px; background: var(--blue);
+      color: #fff; border: none; font-size: 14px; font-weight: 600; cursor: pointer;
+      white-space: nowrap;
+    }
+    .search-btn:disabled { opacity: 0.5; cursor: default; }
+    .search-results { margin-top: 10px; }
+    .search-result-item {
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+      font-size: 13px; cursor: pointer; margin-bottom: 6px;
+      background: var(--card2); transition: border-color 0.1s;
+    }
+    .search-result-item:hover { border-color: var(--blue); background: var(--blue-bg); }
+    .search-result-name { font-weight: 600; }
+    .search-result-sub  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
     /* ── SECTION ── */
     .section { padding: 16px 14px 0; }
@@ -286,9 +316,26 @@
 
   <!-- HEADER -->
   <div class="header">
-    <div>
-      <h1>Drone<span>Check</span></h1>
-      <p id="location-name">Locatie bepalen...</p>
+    <div style="display:flex;align-items:center;gap:10px">
+      <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx="22" fill="#1a6fa8"/>
+        <!-- Arms -->
+        <line x1="50" y1="50" x2="21" y2="21" stroke="white" stroke-width="6" stroke-linecap="round"/>
+        <line x1="50" y1="50" x2="79" y2="21" stroke="white" stroke-width="6" stroke-linecap="round"/>
+        <line x1="50" y1="50" x2="21" y2="79" stroke="white" stroke-width="6" stroke-linecap="round"/>
+        <line x1="50" y1="50" x2="79" y2="79" stroke="white" stroke-width="6" stroke-linecap="round"/>
+        <!-- Propeller rings -->
+        <circle cx="21" cy="21" r="13" stroke="white" stroke-width="4.5"/>
+        <circle cx="79" cy="21" r="13" stroke="white" stroke-width="4.5"/>
+        <circle cx="21" cy="79" r="13" stroke="white" stroke-width="4.5"/>
+        <circle cx="79" cy="79" r="13" stroke="white" stroke-width="4.5"/>
+        <!-- Center body -->
+        <circle cx="50" cy="50" r="9" fill="white"/>
+      </svg>
+      <div>
+        <h1>Drone<span>Check</span></h1>
+        <p id="location-name">Locatie bepalen...</p>
+      </div>
     </div>
     <div class="gps-badge">
       <div class="gps-dot"></div>
@@ -302,10 +349,25 @@
     <div class="loading-text">Locatie en weerdata ophalen...</div>
   </div>
 
-  <!-- ERROR STATE -->
+  <!-- ERROR STATE (GPS geblokkeerd) -->
   <div id="error" class="loading-screen hidden">
     <div class="error-text" id="error-msg"></div>
     <button class="retry-btn" onclick="init()">Opnieuw proberen</button>
+  </div>
+
+  <!-- LOCATION SEARCH (GPS niet beschikbaar op desktop) -->
+  <div id="location-search-screen" class="loading-screen hidden">
+    <div class="location-search">
+      <h3>Voer je locatie in</h3>
+      <p>GPS is niet beschikbaar op dit apparaat. Zoek een locatie om toch weerdata en luchtruiminfo op te halen.</p>
+      <div class="location-search-row">
+        <input id="location-input" class="location-input" type="text"
+               placeholder="Bijv. Utrecht, Zeist..."
+               onkeydown="if(event.key==='Enter')searchLocation()"/>
+        <button class="search-btn" id="search-btn" onclick="searchLocation()">Zoek</button>
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </div>
   </div>
 
   <!-- APP CONTENT (hidden until loaded) -->
@@ -520,12 +582,97 @@ async function init() {
 
   } catch (err) {
     hideEl('loading');
-    showEl('error');
-    document.getElementById('error-msg').textContent =
-      err.code === 1
-        ? 'GPS-toegang is geblokkeerd.\nSta locatie toe in je browserinstellingen.'
-        : `Fout bij laden: ${err.message}`;
+    // code 1 = permission denied, code 2 = position unavailable (no GPS chip / desktop)
+    if (err.code === 1) {
+      showEl('error');
+      document.getElementById('error-msg').textContent =
+        'GPS-toegang is geblokkeerd.\nSta locatie toe in je browserinstellingen.';
+    } else if (err.code === 2 || err.code === 3) {
+      // No GPS available — show manual location search
+      showEl('location-search-screen');
+    } else {
+      showEl('error');
+      document.getElementById('error-msg').textContent = `Fout bij laden: ${err.message}`;
+    }
   }
+}
+
+// ── LOAD WITH COORDINATES (called after manual search) ──
+async function loadWithCoords(lat, lng, displayName) {
+  hideEl('location-search-screen');
+  showEl('loading');
+  state.issues = [];
+  state.lat = lat;
+  state.lng = lng;
+  document.getElementById('location-name').textContent = displayName;
+
+  try {
+    const [weather, sun, pois] = await Promise.all([
+      fetchWeather(lat, lng),
+      fetchSunTimes(lat, lng),
+      fetchPOIs(lat, lng)
+    ]);
+    state.weather = weather;
+    state.sunrise = sun.sunrise;
+    state.sunset  = sun.sunset;
+    state.pois    = pois;
+    computeDaylight();
+    hideEl('loading');
+    showEl('app');
+    renderWeather();
+    renderDaylight();
+    renderMap();
+    renderPOIs();
+    computeOverallStatus();
+    renderUpdatedTime();
+  } catch (err) {
+    hideEl('loading');
+    showEl('error');
+    document.getElementById('error-msg').textContent = `Fout bij laden: ${err.message}`;
+  }
+}
+
+// ── LOCATION SEARCH (Nominatim geocode) ──
+async function searchLocation() {
+  const input = document.getElementById('location-input').value.trim();
+  if (!input) return;
+
+  const btn = document.getElementById('search-btn');
+  const resultsEl = document.getElementById('search-results');
+  btn.disabled = true;
+  btn.textContent = '...';
+  resultsEl.innerHTML = '';
+
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(input)}&format=json&limit=4&addressdetails=1&countrycodes=nl`,
+      { headers: { 'Accept-Language': 'nl' } }
+    );
+    const results = await r.json();
+
+    if (results.length === 0) {
+      resultsEl.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:10px 0">Geen resultaten gevonden</div>';
+    } else {
+      resultsEl.innerHTML = results.map((res, i) => {
+        const a = res.address || {};
+        const name = res.display_name.split(',').slice(0, 2).join(',');
+        const sub  = res.display_name.split(',').slice(2, 4).join(',').trim();
+        return `<div class="search-result-item" onclick="pickLocation(${res.lat}, ${res.lon}, '${name.replace(/'/g,"\\'")}')">
+          <div class="search-result-name">${name}</div>
+          <div class="search-result-sub">${sub}</div>
+        </div>`;
+      }).join('');
+    }
+  } catch {
+    resultsEl.innerHTML = '<div style="font-size:13px;color:var(--red);text-align:center;padding:10px 0">Zoeken mislukt — controleer je verbinding</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Zoek';
+  }
+}
+
+function pickLocation(lat, lng, name) {
+  loadWithCoords(parseFloat(lat), parseFloat(lng), name);
 }
 
 // ── GPS ──
