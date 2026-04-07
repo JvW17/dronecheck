@@ -555,17 +555,21 @@ async function init() {
     // Reverse geocode for display name
     reverseGeocode(state.lat, state.lng);
 
-    // Step 2: Fetch data in parallel
-    const [weather, sun, pois] = await Promise.all([
+    // Step 2: Fetch data in parallel (allSettled so one failure doesn't block others)
+    const [weatherResult, sunResult, poisResult] = await Promise.allSettled([
       fetchWeather(state.lat, state.lng),
       fetchSunTimes(state.lat, state.lng),
       fetchPOIs(state.lat, state.lng)
     ]);
 
-    state.weather = weather;
-    state.sunrise = sun.sunrise;
-    state.sunset  = sun.sunset;
-    state.pois    = pois;
+    if (weatherResult.status === 'rejected' && sunResult.status === 'rejected') {
+      throw new Error(weatherResult.reason?.message || 'Datadiensten niet bereikbaar');
+    }
+
+    state.weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
+    state.sunrise = sunResult.status === 'fulfilled' ? sunResult.value.sunrise : null;
+    state.sunset  = sunResult.status === 'fulfilled' ? sunResult.value.sunset  : null;
+    state.pois    = poisResult.status === 'fulfilled' ? poisResult.value : [];
 
     // Step 3: Determine daylight
     computeDaylight();
@@ -582,13 +586,13 @@ async function init() {
 
   } catch (err) {
     hideEl('loading');
-    // code 1 = permission denied, code 2 = position unavailable (no GPS chip / desktop)
+    // code 1 = permission denied, code 2/3 = position unavailable (no GPS chip / desktop)
     if (err.code === 1) {
       showEl('error');
       document.getElementById('error-msg').textContent =
         'GPS-toegang is geblokkeerd.\nSta locatie toe in je browserinstellingen.';
-    } else if (err.code === 2 || err.code === 3) {
-      // No GPS available — show manual location search
+    } else if (err.code != null) {
+      // Any GPS error — fall back to manual search
       showEl('location-search-screen');
     } else {
       showEl('error');
@@ -607,15 +611,20 @@ async function loadWithCoords(lat, lng, displayName) {
   document.getElementById('location-name').textContent = displayName;
 
   try {
-    const [weather, sun, pois] = await Promise.all([
+    const [weatherResult, sunResult, poisResult] = await Promise.allSettled([
       fetchWeather(lat, lng),
       fetchSunTimes(lat, lng),
       fetchPOIs(lat, lng)
     ]);
-    state.weather = weather;
-    state.sunrise = sun.sunrise;
-    state.sunset  = sun.sunset;
-    state.pois    = pois;
+
+    if (weatherResult.status === 'rejected' && sunResult.status === 'rejected') {
+      throw new Error(weatherResult.reason?.message || 'Datadiensten niet bereikbaar');
+    }
+
+    state.weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
+    state.sunrise = sunResult.status === 'fulfilled' ? sunResult.value.sunrise : null;
+    state.sunset  = sunResult.status === 'fulfilled' ? sunResult.value.sunset  : null;
+    state.pois    = poisResult.status === 'fulfilled' ? poisResult.value : [];
     computeDaylight();
     hideEl('loading');
     showEl('app');
@@ -714,7 +723,7 @@ async function fetchWeather(lat, lng) {
   ].join('&');
 
   const r = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
-  if (!r.ok) throw new Error('Weer ophalen mislukt');
+  if (!r.ok) throw new Error(`Weer ophalen mislukt (HTTP ${r.status})`);
   const d = await r.json();
 
   // Find wind at max altitude from hourly data (closest hour)
@@ -850,6 +859,10 @@ function computeDaylight() {
 // ── RENDER: WEATHER ──
 function renderWeather() {
   const w = state.weather;
+  if (!w) {
+    document.getElementById('weather-label').textContent = 'Weerdata niet beschikbaar';
+    return;
+  }
 
   // Header label
   const altLabel = state.maxAlt;
