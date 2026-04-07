@@ -717,7 +717,7 @@ async function fetchWeather(lat, lng) {
   const params = [
     `latitude=${lat}`, `longitude=${lng}`,
     'current=temperature_2m,precipitation,weather_code,cloud_cover,visibility,wind_speed_10m,wind_gusts_10m',
-    'hourly=wind_speed_120m,wind_gusts_120m',
+    'hourly=wind_speed_120m',
     'forecast_days=1',
     'timezone=auto'
   ].join('&');
@@ -737,7 +737,10 @@ async function fetchWeather(lat, lng) {
   }
 
   const windSpeed120 = d.hourly?.wind_speed_120m?.[hourIdx];
-  const windGust120  = d.hourly?.wind_gusts_120m?.[hourIdx];
+  // wind_gusts_120m doesn't exist in Open-Meteo; scale 10m gusts proportionally
+  const windGust120  = windSpeed120 != null && d.current.wind_speed_10m > 0
+    ? d.current.wind_gusts_10m * (windSpeed120 / d.current.wind_speed_10m)
+    : d.current.wind_gusts_10m;
 
   return {
     temp:       d.current.temperature_2m,

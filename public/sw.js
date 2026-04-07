@@ -18,6 +18,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   // Ignore non-http(s) requests (e.g. chrome-extension://)
   if (!e.request.url.startsWith('http')) return;
+  if (e.request.method !== 'GET') return;
 
   // Network-first for API calls, cache-first for static assets
   const url = new URL(e.request.url);
