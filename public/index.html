@@ -525,8 +525,8 @@ const WIND_LIMIT_YELLOW = 30;   // km/h gusts for caution
 const WIND_LIMIT_RED    = 50;   // km/h gusts for danger
 const TEMP_BATTERY_WARN = 10;   // °C
 const VIS_LIMIT         = 1;    // km — VLOS minimum
-const POI_RADIUS        = 2000; // meters
-const DEFAULT_MAX_ALT   = 120;  // meters (EU open category)
+const POI_RADIUS        = 500;  // meters
+const DEFAULT_MAX_ALT   = 50;   // meters (typical recreational flight)
 
 // ── STATE ──
 let state = {
@@ -717,7 +717,7 @@ async function fetchWeather(lat, lng) {
   const params = [
     `latitude=${lat}`, `longitude=${lng}`,
     'current=temperature_2m,precipitation,weather_code,cloud_cover,visibility,wind_speed_10m,wind_gusts_10m',
-    'hourly=wind_speed_120m',
+    'hourly=wind_speed_80m',
     'forecast_days=1',
     'timezone=auto'
   ].join('&');
@@ -736,10 +736,10 @@ async function fetchWeather(lat, lng) {
     if (h === currentHour) { hourIdx = i; break; }
   }
 
-  const windSpeed120 = d.hourly?.wind_speed_120m?.[hourIdx];
-  // wind_gusts_120m doesn't exist in Open-Meteo; scale 10m gusts proportionally
-  const windGust120  = windSpeed120 != null && d.current.wind_speed_10m > 0
-    ? d.current.wind_gusts_10m * (windSpeed120 / d.current.wind_speed_10m)
+  const windSpeed80 = d.hourly?.wind_speed_80m?.[hourIdx];
+  // wind_gusts at altitude not available; scale 10m gusts proportionally to 80m wind
+  const windGust80  = windSpeed80 != null && d.current.wind_speed_10m > 0
+    ? d.current.wind_gusts_10m * (windSpeed80 / d.current.wind_speed_10m)
     : d.current.wind_gusts_10m;
 
   return {
@@ -750,9 +750,9 @@ async function fetchWeather(lat, lng) {
     visibility: d.current.visibility,           // in meters
     windSpeed10:d.current.wind_speed_10m,
     windGust10: d.current.wind_gusts_10m,
-    windSpeed:  windSpeed120 ?? d.current.wind_speed_10m,
-    windGust:   windGust120  ?? d.current.wind_gusts_10m,
-    hasAltWind: windSpeed120 != null
+    windSpeed:  windSpeed80 ?? d.current.wind_speed_10m,
+    windGust:   windGust80  ?? d.current.wind_gusts_10m,
+    hasAltWind: windSpeed80 != null
   };
 }
 
